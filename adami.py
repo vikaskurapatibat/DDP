@@ -120,7 +120,7 @@ class MultiPhase(Application):
         integrator = EPECIntegrator(fluid=TransportVelocityStep())
         solver = Solver(
             kernel=kernel, dim=dim, integrator=integrator,
-            dt=dt, tf=tf, adaptive_timestep=False, pfreq=1,
+            dt=dt, tf=tf, adaptive_timestep=False,
             output_at_times=[0., 0.08, 0.16, 0.26])
         return solver
 
@@ -136,8 +136,8 @@ class MultiPhase(Application):
                 # Density_correction(dest='wall', sources=['fluid', 'wall']),
             ]),
             Group(equations=[
-                TaitEOS(dest='fluid', sources=None, rho0=rho1, c0=c0, gamma=1, p0=50.0),
-                SolidWallPressureBCnoDensity(dest='wall', sources=['fluid'], rho0=rho1, p0=50.0),
+                TaitEOS(dest='fluid', sources=None, rho0=rho1, c0=c0, gamma=7),
+                SolidWallPressureBCnoDensity(dest='wall', sources=['fluid']),
             ]),
             Group(equations=[
                 ColorGradientAdami(dest='fluid', sources=['fluid', 'wall']),
