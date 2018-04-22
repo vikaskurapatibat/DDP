@@ -136,7 +136,7 @@ class MultiPhase(Application):
                 # Density_correction(dest='wall', sources=['fluid', 'wall']),
             ]),
             Group(equations=[
-                TaitEOS(dest='fluid', sources=None, rho0=rho1, c0=c0, gamma=7),
+                TaitEOS(dest='fluid', sources=None, rho0=rho1, c0=c0, gamma=1),
                 SolidWallPressureBCnoDensity(dest='wall', sources=['fluid']),
             ]),
             Group(equations=[
