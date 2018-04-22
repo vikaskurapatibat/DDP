@@ -1,0 +1,4 @@
+1) Unable to reproduce the wrong results with Morris setup even with gamma 1 and 7 and no background pressure. 
+2) Adami gives wrong results with gamma 1 and 7 and no background pressure.
+3) Gives the right result for Adami with gamma 1 and background pressure. 
+
