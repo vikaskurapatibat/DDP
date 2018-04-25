@@ -2,4 +2,5 @@
 2) Adami gives wrong results with gamma 1 and 7 and no background pressure.
 3) Gives the right result for Adami with gamma 1 and background pressure. 
 4) Wrong result with adami's case and no background pressure with tensile correction from PySPH. 
+5) Adami case2 gives wrong results even with reduced time step and hence time step is not the issue.
 

@@ -51,11 +51,11 @@ epsilon = 0.01 / h0
 v0 = 10.0
 r0 = 0.05
 
-dt1 = 0.25*np.sqrt(rho1*h0*h0*h0/(2.0*np.pi*sigma))
+dt1 = 0.25*np.sqrt(rho2*h0*h0*h0/(2.0*np.pi*sigma))
 
 dt2 = 0.25*h0/(c0+v0)
 
-dt3 = 0.125*rho1*h0*h0/nu1
+dt3 = 0.125*rho2*h0*h0/nu2
 
 dt = 0.9*min(dt1, dt2, dt3)
 
@@ -148,8 +148,7 @@ class MultiPhase(Application):
                     dest='gas', sources=[
                         'liquid', 'wall', 'gas']),
                 SummationDensity(
-                    dest='wall', sources=[
-            ]),
+                    dest='wall', sources=['liquid', 'wall', 'gas']),]),
             Group(equations=[
                 TaitEOS(dest='liquid', sources=None, rho0=rho1, c0=c0, gamma=1, p0=p1),
                 TaitEOS(dest='gas', sources=None,
@@ -180,12 +179,10 @@ class MultiPhase(Application):
                     SolidWallNoSlipBC(dest='liquid', sources=['wall'], nu=nu1),
                     SolidWallNoSlipBC(dest='gas', sources=['wall'], nu=nu2),
                 ]),
-        ]
+                ]
 
         return adami_equations
-    
-    # def pre_step(self, solver):
-    #     solver.dump_output()
+
 
 if __name__ == '__main__':
     app = MultiPhase()
