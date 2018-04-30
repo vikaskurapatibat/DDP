@@ -148,7 +148,8 @@ class MultiPhase(Application):
                     dest='gas', sources=[
                         'liquid', 'wall', 'gas']),
                 SummationDensity(
-                    dest='wall', sources=['liquid', 'wall', 'gas']),]),
+                    dest='wall', sources=['liquid', 'wall', 'gas'])
+            ]),
             Group(equations=[
                 TaitEOS(dest='liquid', sources=None, rho0=rho1, c0=c0, gamma=1, p0=p1),
                 TaitEOS(dest='gas', sources=None,
