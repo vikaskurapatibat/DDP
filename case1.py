@@ -2,7 +2,6 @@ import numpy as np
 import os
 
 from pysph.sph.wc.basic import TaitEOS
-from pysph.sph.basic_equations import IsothermalEOS
 from pysph.sph.gas_dynamics.basic import ScaleSmoothingLength
 
 from pysph.tools.geometry import get_2d_block
@@ -19,7 +18,7 @@ from pysph.sph.integrator_step import TransportVelocityStep
 from pysph.sph.integrator import PECIntegrator, EPECIntegrator
 
 from pysph.base.nnps import DomainManager
-
+from pysph.solver.utils import iter_output
 from surface_tension import SummationDensitySourceMass, MomentumEquationViscosityMorris, MomentumEquationPressureGradientMorris, InterfaceCurvatureFromDensity, MorrisColorGradient
 
 dim = 2
@@ -51,7 +50,11 @@ KE = 10**(-6.6)*p1*p1*gamma/(c0 * c0 * rho1 * rho1 * nx * nx * (gamma - 1))
 
 Vmax = np.sqrt(2 * KE / (rho1 * dx * dx))
 
-dt = 0.9 * 0.25*h0 / (c0 + Vmax)
+dt1 = 0.25*np.sqrt(rho1*h0*h0*h0/(2.0*np.pi*sigma))
+
+dt2 = 0.25*h0/(c0+Vmax)
+
+dt = 0.9*min(dt1, dt2)
 
 
 class MultiPhase(Application):
@@ -82,8 +85,8 @@ class MultiPhase(Application):
                                  'kappa', 'N', 'scolor', 'p'])
         angles = np.random.random_sample((len(fluid.x),))*2*np.pi
         vel = np.sqrt(2 * KE / fluid.m)
-        fluid.u = vel  # *2.0*np.cos(angles)
-        fluid.v = vel  # *2.0*np.sin(angles)
+        fluid.u = vel*2.0*np.cos(angles)
+        fluid.v = vel*2.0*np.sin(angles)
         fluid.nu[:] = 0.0
         return [fluid]
 
@@ -97,7 +100,7 @@ class MultiPhase(Application):
         integrator = EPECIntegrator(fluid=TransportVelocityStep())
         solver = Solver(
             kernel=kernel, dim=dim, integrator=integrator,
-            dt=dt, tf=tf, adaptive_timestep=False, pfreq=1)
+            dt=dt, tf=tf, adaptive_timestep=False)
         return solver
 
     def create_equations(self):
@@ -108,21 +111,20 @@ class MultiPhase(Application):
                         'fluid']),
             ], real=False, update_nnps=False),
             Group(equations=[
-                TaitEOS(dest='fluid', sources=None, rho0=rho1, c0=c0, gamma=1.0, p0=p1),
-                # IsothermalEOS(dest='fluid', sources=None,)
+                TaitEOS(dest='fluid', sources=None, rho0=rho1, c0=c0, gamma=1.0),
                 SmoothedColor(
                     dest='fluid', sources=['fluid', ]),
-                # ScaleSmoothingLength(dest='fluid', sources=None, factor=2.0/3.0),
-            ], real=False, update_nnps=False),
+                ScaleSmoothingLength(dest='fluid', sources=None, factor=2.0/3.0),
+            ], real=False, update_nnps=True),
             Group(equations=[
                 MorrisColorGradient(dest='fluid', sources=['fluid', ],
                                     epsilon=epsilon),
-                # ScaleSmoothingLength(dest='fluid', sources=None, factor=1.5),
             ], real=False, update_nnps=False),
             Group(equations=[
                 InterfaceCurvatureFromDensity(dest='fluid', sources=['fluid'],
                                                 with_morris_correction=True),
-            ], real=False, update_nnps=False),
+                ScaleSmoothingLength(dest='fluid', sources=None, factor=1.5),
+            ], real=False, update_nnps=True),
             Group(
                 equations=[
                     MomentumEquationPressureGradientMorris(
@@ -151,7 +153,8 @@ class MultiPhase(Application):
             v = pa.v
             length = len(m)
             ke.append(np.log10(sum(0.5 * m * (u**2 + v**2) / length)))
-        plt.plot(t, ke)
+        fname = os.path.join(self.output_dir, 'results.npz')
+        np.savez(fname, t=t, ke=ke)        
         plt.plot(t, ke, 'o')
         fig = os.path.join(self.output_dir, "KEvst.png")
         plt.savefig(fig)
