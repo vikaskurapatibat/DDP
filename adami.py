@@ -17,6 +17,7 @@ from pysph.solver.solver import Solver
 from pysph.sph.wc.transport_velocity import SolidWallNoSlipBC
 from pysph.sph.integrator_step import TransportVelocityStep
 from pysph.sph.integrator import PECIntegrator, EPECIntegrator
+from pysph.sph.wc.basic import MomentumEquation
 
 from pysph.base.nnps import DomainManager
 from math import sqrt
@@ -33,8 +34,6 @@ factor2 = 1 / factor1
 rho1 = 1.0
 
 c0 = 10.0
-gamma = 1.0
-R = 287.1
 
 p1 = c0**2 * rho1
 
@@ -88,7 +87,7 @@ class MultiPhase(Application):
                             'ax', 'ay', 'az', 'wij', 'vmag2', 'N', 'wij_sum',
                             'rho0', 'u0', 'v0', 'w0', 'x0', 'y0', 'z0',
                             'kappa', 'arho', 'nu', 'wg', 'ug', 'vg',
-                            'pi00', 'pi01', 'pi10', 'pi11']
+                            'pi00', 'pi01', 'pi10', 'pi11', 'dt_cfl', 'dt_force']
         consts = {'max_ddelta': np.zeros(1, dtype=float)}
         fluid = get_particle_array(
             name='fluid', x=fluid_x, y=fluid_y, h=h_fluid, m=m_fluid,
@@ -136,7 +135,7 @@ class MultiPhase(Application):
                 # Density_correction(dest='wall', sources=['fluid', 'wall']),
             ]),
             Group(equations=[
-                TaitEOS(dest='fluid', sources=None, rho0=rho1, c0=c0, gamma=1, p0=p1),
+                TaitEOS(dest='fluid', sources=None, rho0=rho1, c0=c0, gamma=7, p0=p1),
                 SolidWallPressureBCnoDensity(dest='wall', sources=['fluid']),
             ]),
             Group(equations=[
@@ -147,6 +146,7 @@ class MultiPhase(Application):
                 equations=[
                     MomentumEquationPressureGradientAdami(
                         dest='fluid', sources=['fluid', 'wall']),
+                    # MomentumEquation(dest='fluid', sources=['fluid', 'wall'], c0=c0, alpha=0.0, beta=0.0, tensile_correction=True),
                     MomentumEquationViscosityAdami(
                         dest='fluid', sources=['fluid']),
                     SurfaceForceAdami(
