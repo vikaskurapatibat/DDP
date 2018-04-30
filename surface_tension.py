@@ -94,8 +94,8 @@ class SummationDensity(Equation):
         d_rho[d_idx] = 0.0
         d_V[d_idx] = 0.0
 
-    def loop(self, d_idx, d_V, d_rho, d_m, WIJ, s_m, s_idx):
-        d_rho[d_idx] += d_m[s_idx]*WIJ
+    def loop(self, d_idx, d_V, d_rho, d_m, WIJ, s_idx):
+        d_rho[d_idx] += d_m[d_idx]*WIJ
         d_V[d_idx] += WIJ
 
 
