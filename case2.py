@@ -9,7 +9,7 @@ from pysph.tools.geometry import get_2d_block
 from pysph.base.utils import get_particle_array
 from pysph.base.kernels import CubicSpline, QuinticSpline
 from pysph.sph.equation import Group, Equation
-
+from surface_tension import SummationDensitySourceMass, MomentumEquationViscosityMorris, MomentumEquationPressureGradientMorris, InterfaceCurvatureFromDensity, MorrisColorGradient
 from pysph.sph.surface_tension import SmoothedColor, CSFSurfaceTensionForce
 
 from pysph.solver.application import Application
@@ -56,144 +56,8 @@ dt3 = 0.125*rho1*h0*h0/nu0
 dt = 0.9*min(dt1, dt2, dt3)
 
 
-class SummationDensity(Equation):
-
-    def initialize(self, d_idx, d_V, d_rho):
-        d_rho[d_idx] = 0.0
-
-    def loop(self, d_idx, d_V, d_rho, d_m, WIJ, s_m, s_idx):
-        d_rho[d_idx] += s_m[s_idx]*WIJ
-
-
-class MomentumEquationViscosity(Equation):
-
-    def __init__(self, dest, sources, eta=0.01):
-        self.eta = eta*eta
-        super(MomentumEquationViscosity, self).__init__(dest, sources)
-
-    def loop(self, d_idx, s_idx, d_au, d_av, d_aw, s_m, d_nu, s_nu, d_rho, s_rho, DWIJ, R2IJ, VIJ, HIJ, XIJ):
-
-        dw = (DWIJ[0]*XIJ[0]+DWIJ[1]*XIJ[1]+DWIJ[2]*XIJ[2])/(R2IJ + self.eta*HIJ*HIJ)
-        mult = s_m[s_idx]*(d_nu[d_idx]+s_nu[s_idx])/(d_rho[d_idx]*s_rho[s_idx])
-        d_au[d_idx] += dw*mult*VIJ[0]
-        d_av[d_idx] += dw*mult*VIJ[1]
-        d_aw[d_idx] += dw*mult*VIJ[2]
-
-
-class MomentumEquationPressureGradient(Equation):
-
-    def __init__(self, dest, sources):
-        super(MomentumEquationPressureGradient, self).__init__(dest, sources)
-
-    def initialize(self, d_idx, d_au, d_av, d_aw):
-        d_au[d_idx] = 0.0
-        d_av[d_idx] = 0.0
-        d_aw[d_idx] = 0.0
-
-    def loop(self, d_idx, s_idx, d_au, d_av, d_aw, s_m, d_p, s_p, DWIJ, d_rho, s_rho):
-        factor = -s_m[s_idx]*(d_p[d_idx] + s_p[s_idx])/(d_rho[d_idx]*s_rho[s_idx])
-        d_au[d_idx] += factor*DWIJ[0]
-        d_av[d_idx] += factor*DWIJ[1]
-        d_aw[d_idx] += factor*DWIJ[2]
-
-
-class InterfaceCurvatureFromNumberDensity(Equation):
-
-    def __init__(self, dest, sources, with_morris_correction=True):
-        self.with_morris_correction = with_morris_correction
-
-        super(InterfaceCurvatureFromNumberDensity, self).__init__(dest, sources)
-
-    def initialize(self, d_idx, d_kappa, d_wij_sum):
-        d_kappa[d_idx] = 0.0
-        d_wij_sum[d_idx] = 0.0
-
-    def loop(self, d_idx, s_idx, d_kappa, d_nx, d_ny, d_nz, s_nx, s_ny, s_nz,
-             d_V, s_V, d_N, s_N, d_wij_sum, s_rho, s_m, WIJ, DWIJ):
-
-        nijdotdwij = (d_nx[d_idx] - s_nx[s_idx]) * DWIJ[0] + \
-            (d_ny[d_idx] - s_ny[s_idx]) * DWIJ[1] + \
-            (d_nz[d_idx] - s_nz[s_idx]) * DWIJ[2]
-
-        tmp = 1.0
-        if self.with_morris_correction:
-            tmp = min(d_N[d_idx], s_N[s_idx])
-
-        d_wij_sum[d_idx] += tmp * s_m[s_idx]/s_rho[s_idx] * WIJ
-
-        d_kappa[d_idx] += tmp*nijdotdwij*s_m[s_idx]/s_rho[s_idx]
-
-    def post_loop(self, d_idx, d_wij_sum, d_nx, d_kappa):
-
-        if self.with_morris_correction:
-            if d_wij_sum[d_idx] > 1e-12:
-                d_kappa[d_idx] /= d_wij_sum[d_idx]
-
-
-class MorrisColorGradient(Equation):
-
-    def __init__(self, dest, sources, epsilon=1e-6):
-        self.epsilon2 = epsilon * epsilon
-        super(MorrisColorGradient, self).__init__(dest, sources)
-
-    def initialize(self, d_idx, d_cx, d_cy, d_cz, d_nx, d_ny, d_nz,
-                   d_ddelta, d_N):
-
-        # color gradient
-        d_cx[d_idx] = 0.0
-        d_cy[d_idx] = 0.0
-        d_cz[d_idx] = 0.0
-
-        # interface normals
-        d_nx[d_idx] = 0.0
-        d_ny[d_idx] = 0.0
-        d_nz[d_idx] = 0.0
-
-        # reliability indicator for normals and dirac delta
-        d_N[d_idx] = 0.0
-        d_ddelta[d_idx] = 0.0
-
-    def loop(self, d_idx, s_idx, d_scolor, s_scolor, d_cx, d_cy, d_cz,
-             s_m, s_rho, DWIJ):
-
-        # Eq. (17) in [JM00]
-        Cba = (s_scolor[s_idx] - d_scolor[d_idx]) * s_m[s_idx] / s_rho[s_idx]
-
-        # color gradient
-        d_cx[d_idx] += Cba * DWIJ[0]
-        d_cy[d_idx] += Cba * DWIJ[1]
-        d_cz[d_idx] += Cba * DWIJ[2]
-
-    def post_loop(self, d_idx, d_cx, d_cy, d_cz,
-                  d_nx, d_ny, d_nz, d_N, d_ddelta):
-        # absolute value of the color gradient
-        if d_cx[d_idx]*d_cx[d_idx] < self.epsilon2:
-            d_cx[d_idx] = 0.0
-        if d_cy[d_idx]*d_cy[d_idx] < self.epsilon2:
-            d_cy[d_idx] = 0.0
-        if d_cz[d_idx]*d_cz[d_idx] < self.epsilon2:
-            d_cz[d_idx] = 0.0
-
-        mod_gradc2 = d_cx[d_idx] * d_cx[d_idx] + \
-            d_cy[d_idx] * d_cy[d_idx] + \
-            d_cz[d_idx] * d_cz[d_idx]
-
-        # avoid sqrt computations on non-interface particles
-        # (particles for which the color gradient is zero) Eq. (19,
-        # 20) in [JM00]
-        if mod_gradc2 > self.epsilon2:
-            # this normal is reliable in the sense of [JM00]
-            d_N[d_idx] = 1.0
-
-            # compute the normals
-            mod_gradc = 1. / sqrt(mod_gradc2)
-
-            d_nx[d_idx] = d_cx[d_idx] * mod_gradc
-            d_ny[d_idx] = d_cy[d_idx] * mod_gradc
-            d_nz[d_idx] = d_cz[d_idx] * mod_gradc
-
-            # discretized Dirac Delta function
-            d_ddelta[d_idx] = 1. / mod_gradc
+def radius(x, y):
+    return x*x + y*y
 
 
 class MultiPhase(Application):
@@ -223,10 +87,6 @@ class MultiPhase(Application):
         fluid.V[:] = 1. / volume
         fluid.add_output_arrays(['V', 'color', 'cx', 'cy', 'nx', 'ny', 'ddelta',
                                  'kappa', 'N', 'scolor', 'p'])
-        # angles = np.random.random_sample((len(fluid.x),))*2*np.pi
-        # vel = np.sqrt(2 * KE / fluid.m)
-        # fluid.u = vel*2.0*np.cos(angles)
-        # fluid.v = vel*2.0*np.sin(angles)
         fluid.nu[:] = nu0
         return [fluid]
 
@@ -246,37 +106,29 @@ class MultiPhase(Application):
     def create_equations(self):
         morris_equations = [
             Group(equations=[
-                SummationDensity(
+                SummationDensitySourceMass(
                     dest='fluid', sources=[
                         'fluid']),
             ], real=False, update_nnps=False),
             Group(equations=[
-                # IsothermalEOS(
-                #     dest='fluid',
-                #     sources=None,
-                #     rho0=rho1,
-                #     p0=0.0,
-                #     c0=c0),
-                TaitEOS(dest='fluid', sources=None, rho0=rho1, c0=c0, gamma=1.0, p0=p1),
+                TaitEOS(dest='fluid', sources=None, rho0=rho1, c0=c0, gamma=1.0),
                 SmoothedColor(
                     dest='fluid', sources=[
                         'fluid', ]),
-                # ScaleSmoothingLength(dest='fluid', sources=None, factor=2.0/3.0),
             ], real=False, update_nnps=False),
             Group(equations=[
                 MorrisColorGradient(dest='fluid', sources=['fluid', ],
                                     epsilon=epsilon),
-                # ScaleSmoothingLength(dest='fluid', sources=None, factor=1.5),
             ], real=False, update_nnps=False),
             Group(equations=[
-                InterfaceCurvatureFromNumberDensity(dest='fluid', sources=['fluid'],
+                InterfaceCurvatureFromDensity(dest='fluid', sources=['fluid'],
                                                     with_morris_correction=True),
             ], real=False, update_nnps=False),
             Group(
                 equations=[
-                    MomentumEquationPressureGradient(
+                    MomentumEquationPressureGradientMorris(
                         dest='fluid', sources=['fluid']),
-                    MomentumEquationViscosity(
+                    MomentumEquationViscosityMorris(
                         dest='fluid', sources=['fluid']),
                     CSFSurfaceTensionForce(
                         dest='fluid', sources=None, sigma=sigma),
@@ -289,19 +141,40 @@ class MultiPhase(Application):
         import matplotlib.pyplot as plt
         from pysph.solver.utils import load
         files = self.output_files
-        ke = []
+        dp = []
         t = []
         for f in files:
             data = load(f)
             pa = data['arrays']['fluid']
             t.append(data['solver_data']['t'])
             m = pa.m
-            u = pa.u
-            v = pa.v
-            length = len(m)
-            ke.append(sum(0.5 * m * (u**2 + v**2)))
-        plt.plot(t, ke)
-        fig = os.path.join(self.output_dir, "KEvst.png")
+            x = pa.x
+            y = pa.y
+            N = pa.N
+            p = pa.p
+            n = len(m)
+            count_in = 0
+            count_out = 0
+            p_in = 0
+            p_out = 0
+
+            for i in range(n):
+                r = radius(x[i], y[i])
+                if N[i] < 1:
+                    if radius(x[i], y[i]) < 0.0625:
+                        p_in += p[i]
+                        count_in += 1
+                    else:
+                        p_out += p[i]
+                        count_out += 1
+                else:
+                    continue
+            dp.append((p_in/count_in) - (p_out/count_out))
+
+        fname = os.path.join(self.output_dir, 'results.npz')
+        np.savez(fname, t=t, dp=dp)
+        plt.plot(t, dp)
+        fig = os.path.join(self.output_dir, "dpvst.png")
         plt.savefig(fig)
         plt.close()
 
