@@ -28,12 +28,12 @@ Lx = 1.0
 Ly = 1.0
 
 nu0 = 0.05
-sigma = 1.0
+sigma = 2.0
 factor1 = 0.5
 factor2 = 1 / factor1
 rho1 = 1.0
 
-c0 = 20.0
+c0 = 30.0
 gamma = 1.4
 R = 287.1
 
@@ -120,7 +120,7 @@ class MultiPhase(Application):
         integrator = EPECIntegrator(fluid=TransportVelocityStep())
         solver = Solver(
             kernel=kernel, dim=dim, integrator=integrator,
-            dt=dt, tf=tf, adaptive_timestep=False, pfreq=1,
+            dt=dt, tf=tf, adaptive_timestep=False,
             output_at_times=[0., 0.08, 0.16, 0.26])
         return solver
 
@@ -166,10 +166,42 @@ class MultiPhase(Application):
 
         return morris_equations
 
+    def post_process(self):
+        import matplotlib.pyplot as plt
+        from pysph.solver.utils import load
+        files = self.output_files
+        amat = []
+        t = []
+        for f in files:
+            data = load(f)
+            pa = data['arrays']['fluid']
+            t.append(data['solver_data']['t'])
+            x = pa.x
+            color = pa.color
+            length = len(color)
+            min_x = 0.0
+            max_x = 0.0
+            for i in range(length):
+                if color[i] == 1:
+                    if x[i] < min_x:
+                        min_x = x[i]
+                    if x[i] > max_x:
+                        max_x = x[i]
+                    else:
+                        continue
+                else:
+                    continue
+            amat.append(0.5*(max_x - min_x))
+        fname = os.path.join(self.output_dir, 'results.npz')
+        np.savez(fname, t=t, semimajor=amat)
+        plt.plot(t, amat)
+        fig = os.path.join(self.output_dir, 'semimajorvst.png')
+        plt.savefig(fig)
+        plt.close()
 
 if __name__ == '__main__':
     app = MultiPhase()
     app.run()
-
+    app.post_process()
 
 # Generalised TVF 2017 jcp Hu and Adams
