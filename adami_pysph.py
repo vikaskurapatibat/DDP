@@ -1,14 +1,14 @@
 import numpy
 from pysph.base.utils import get_particle_array
 from pysph.base.kernels import CubicSpline, WendlandQuintic, Gaussian, QuinticSpline
-from pysph.sph.equation import Grpup
+from pysph.sph.equation import Group
 from pysph.solver.application import Application
 from pysph.solver.solver import Solver
-from pysph.solver.integrator_step import TransportVelocityStep
+from pysph.sph.integrator_step import TransportVelocityStep
 from pysph.sph.integrator import PECIntegrator
 from pysph.base.nnps import DomainManager
-from pysph.sph.wc.transport_velocity import SummationDensity, MomentumEquationPressureGradient, MomentumEquationViscosity
-
+from pysph.sph.wc.transport_velocity import SummationDensity, MomentumEquationPressureGradient
+from pysph.sph.equation import Equation
 from pysph.sph.surface_tension import AdamiColorGradient
 
 dim = 2
@@ -17,6 +17,7 @@ domain_height = 1.0
 
 # numerical constants
 sigma = 1.0
+eta = 0.2
 
 # discretization parameters
 dx = dy = 0.0125
@@ -24,10 +25,10 @@ dxb2 = dyb2 = 0.5 * dx
 volume = dx*dx
 hdx = 1.3
 h0 = hdx * dx
-rho0 = 1000.0
+rho0 = 1.0
 c0 = 20.0
 p0 = c0*c0*rho0
-nu = 1.0/rho0
+nu = eta/rho0
 
 # correction factor for Morris's Method I. Set with_morris_correction
 # to True when using this correction.
@@ -40,6 +41,18 @@ dt_viscous = 0.125 * h0**2/nu
 dt_force = 1.0
 
 dt = 0.9 * min(dt_cfl, dt_viscous, dt_force)
+
+
+class MomentumEquationViscosity(Equation):
+    def loop(self, d_idx, s_idx, d_nu, s_nu, d_m, d_V, s_V, VIJ, XIJ, DWIJ, R2IJ, EPS, d_au, d_av, d_aw):
+        Vi = 1/d_V[d_idx]
+        Vj = 1/s_V[s_idx]
+        factor = 2*d_nu[d_idx]*s_nu[s_idx]/(d_nu[d_idx]+s_nu[s_idx])*(Vi*Vi + Vj*Vj)
+        FIJ = XIJ[0]*DWIJ[0] + XIJ[1]*DWIJ[1] + XIJ[2]*DWIJ[2]
+        tmp = FIJ*factor/(R2IJ+EPS)
+        d_au[d_idx] += tmp*VIJ[0]/d_m[d_idx]
+        d_av[d_idx] += tmp*VIJ[1]/d_m[d_idx]
+        d_aw[d_idx] += tmp*VIJ[2]/d_m[d_idx]
 
 
 class StateEquation(Equation):
@@ -90,6 +103,14 @@ class AdamiReproducingDivergence(Equation):
         d_kappa[d_idx] *= -self.dim
 
 
+class CSFSurfaceTensionForce(Equation):
+    
+    def loop(self, d_idx, d_au, d_av, d_aw, d_kappa, d_cx, d_cy, d_cz, d_m, d_alpha):
+        d_au[d_idx] += -d_alpha[d_idx]*d_kappa[d_idx]*d_cx[d_idx]/d_m[d_idx]
+        d_av[d_idx] += -d_alpha[d_idx]*d_kappa[d_idx]*d_cy[d_idx]/d_m[d_idx]
+        d_aw[d_idx] += -d_alpha[d_idx]*d_kappa[d_idx]*d_cz[d_idx]/d_m[d_idx]
+
+
 class Adami(Application):
     def create_particles(self):
         x, y = numpy.mgrid[dxb2:domain_width:dx, dyb2:domain_height:dy]
@@ -126,7 +147,7 @@ class Adami(Application):
 
             # variable to indicate reliable normals and normalizing
             # constant
-            'N', 'wij_sum',
+            'N', 'wij_sum', 'nu', 'alpha'
 
         ]
 
@@ -143,6 +164,8 @@ class Adami(Application):
 
         # particle volume
         fluid.V[:] = 1./volume
+        fluid.nu[:] = nu
+        fluid.alpha[:] = sigma
 
         # set additional output arrays for the fluid
         fluid.add_output_arrays(['V', 'color', 'cx', 'cy', 'nx', 'ny',
@@ -167,37 +190,38 @@ class Adami(Application):
         return solver
 
     def create_equations(self):
-        equations = [
+        adami_equations = [
             Group(equations=[
-                SummationDensity(dest='fluid', sources=['fluid'],
-                                 ],  real=False)),
+                SummationDensity(dest='fluid', sources=['fluid'])
+            ]),
             Group(equations=[
                 StateEquation(dest='fluid', sources=None, rho0=rho0,
                               p0=p0),
-            ], real=False),
+            ]),
             Group(equations=[
                 AdamiColorGradient(dest='fluid', sources=['fluid']),
-            ], real=False
+            ],
             ),
             Group(equations=[
                 AdamiReproducingDivergence(dest='fluid', sources=['fluid'],
                                            dim=2),
-            ], real=False),
+            ], ),
             Group(
                 equations=[
-
-                    # Gradient of pressure for the fluid phase
                     MomentumEquationPressureGradient(
                         dest='fluid', sources=['fluid'], pb=p0),
-
-                    # Artificial viscosity for the fluid phase.
                     MomentumEquationViscosity(
-                        dest='fluid', sources=['fluid'], nu=nu),
-
-                    # Surface tension force for the CSF formulation
-                    CSFSurfaceTensionForce(dest='fluid', sources=None,
-                                           sigma=sigma),
+                        dest='fluid', sources=['fluid']),
+                    CSFSurfaceTensionForce(dest='fluid', sources=None,)
                 ], )
         ]
 
-        ]
+        return adami_equations
+
+    def pre_step(self, solver):
+        solver.dump_output()
+
+
+if __name__ == '__main__':
+    app = Adami()
+    app.run()
