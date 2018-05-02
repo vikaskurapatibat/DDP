@@ -158,7 +158,64 @@ class MultiPhase(Application):
 
         return adami_equations
 
+    def post_process(self):
+        import matplotlib.pyplot as plt
+        from pysph.solver.utils import load
+        files = self.output_files
+        t = []
+        centerx = []
+        centery = []
+        velx = []
+        vely = []
+        for f in files:
+            data = load(f)
+            pa = data['arrays']['fluid']
+            t.append(data['solver_data']['t'])
+            x = pa.x
+            y = pa.y
+            u = pa.u
+            v = pa.v
+            color = pa.color
+            length = len(color)
+            cx = 0
+            cy = 0
+            vx = 0
+            vy = 0
+            count = 0
+            for i in range(length):
+                if color[i] == 1:
+                    if x[i] > 0 and y[i] > 0:
+                        cx += x[i]
+                        cy += y[i]
+                        vx += u[i]
+                        vy += v[i]
+                        count += 1
+                    else:
+                        continue
+                else:
+                    continue
+            # As the masses are all the same in this case
+            centerx.append(cx/count)
+            centery.append(cy/count)
+            velx.append(vx/count)
+            vely.append(vy/count)
+        fname = os.path.join(self.output_dir, 'results.npz')
+        np.savez(fname, t=t, centerx=centerx, centery=centery,
+                 velx=velx, vely=vely)
+        plt.plot(t, centerx, label='x position')
+        plt.plot(t, centery, label='y position')
+        plt.legend()
+        fig1 = os.path.join(self.output_dir, 'centerofmassposvst')
+        plt.savefig(fig1)
+        plt.close()
+        plt.plot(t, velx, label='x velocity')
+        plt.plot(t, vely, label='y velocity')
+        plt.legend()
+        fig2 = os.path.join(self.output_dir, 'centerofmassvelvst')
+        plt.savefig(fig2)
+        plt.close()
 
 if __name__ == '__main__':
     app = MultiPhase()
     app.run()
+    app.post_process()
