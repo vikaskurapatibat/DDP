@@ -31,7 +31,7 @@ factor1 = 0.5
 factor2 = 1 / factor1
 rho1 = 1.0
 
-c0 = 10.0
+c0 = 20.0
 gamma = 1.4
 R = 287.1
 rho2 = 0.001
@@ -135,7 +135,7 @@ class MultiPhase(Application):
         integrator = EPECIntegrator(liquid=TransportVelocityStep(), gas=TransportVelocityStep())
         solver = Solver(
             kernel=kernel, dim=dim, integrator=integrator,
-            dt=dt, tf=tf, adaptive_timestep=False, pfreq=1,)
+            dt=dt, tf=tf, adaptive_timestep=False)
         return solver
 
     def create_equations(self):
@@ -184,7 +184,44 @@ class MultiPhase(Application):
 
         return adami_equations
 
+    def post_process(self):
+        import matplotlib.pyplot as plt
+        from pysph.solver.utils import load
+        files = self.output_files
+        t = []
+        centerx = []
+        centery = []
+        for f in files:
+            data = load(f)
+            pa = data['arrays']['liquid']
+            t.append(data['solver_data']['t'])
+            x = pa.x
+            y = pa.y
+            length = len(x)
+            cx = 0
+            cy = 0
+            count = 0
+            for i in range(length):
+                if x[i] > 0 and y[i] > 0:
+                    cx += x[i]
+                    cy += y[i]
+                    count += 1
+                else:
+                    continue
+            # As the masses are all the same in this case
+            centerx.append(cx/count)
+            centery.append(cy/count)
+        fname = os.path.join(self.output_dir, 'results.npz')
+        np.savez(fname, t=t, centerx=centerx, centery=centery)
+        plt.plot(t, centerx, 'o', label='x position')
+        plt.plot(t, centery, '*', label='y position')
+        plt.legend()
+        fig1 = os.path.join(self.output_dir, 'centerofmassposvst')
+        plt.savefig(fig1)
+        plt.close()
+
 
 if __name__ == '__main__':
     app = MultiPhase()
     app.run()
+    app.post_process()
