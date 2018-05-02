@@ -21,7 +21,7 @@ To do:
 
 1) morris background pressure (1)
 2) Post Processing (1)
-3) PySPH cases fix (2)
+3) PySPH cases fix (2) - Adami scheme in PySPH has some issue with Kappa calculation even from the pressure. Need help.
 4) Shadloo case fix (2)
 5) Adami Cases: three phase interaction (3)
 6) TVF + ST (4)
@@ -37,9 +37,13 @@ Finished:
 2) Morris cases fix
 3) Clean up Code
 4) Adami Cases : variable density
-5) 
 
 
 Skipped:
 1) Other TIS
 2) Generalized TVF
+
+30-04-2018:
+1) No background pressure mentioned in that paper.
+
+
