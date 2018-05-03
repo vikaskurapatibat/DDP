@@ -244,7 +244,7 @@ class SurfaceTensionForce(Equation):
 
     def __init__(self, dest, sources, sigma=1.0):
         self.sigma = sigma
-        super(CSFSurfaceTensionForce, self).__init__(dest, sources)
+        super(SurfaceTensionForce, self).__init__(dest, sources)
 
     # def initialize(self, d_idx, d_au, d_av):
     #     d_au[d_idx] = 0.0
@@ -286,3 +286,59 @@ class SummationDensitySourceMass(Equation):
 
     def post_loop(self, d_idx, d_V, d_rho, d_m):
         d_V[d_idx] = d_rho[d_idx]/d_m[d_idx]
+
+
+class StateEquation(Equation):
+
+    def __init__(self, dest, sources, p0, rho0, gamma=7):
+        self.gamma = gamma
+        self.p0 = p0
+        self.rho0 = rho0
+        super(StateEquation, self).__init__(dest, sources)
+
+    def initialize(self, d_idx, d_p, d_rho):
+        factor = (d_rho[d_idx]/self.rho0)**(self.gamma)
+        d_p[d_idx] = self.p0*(factor - 1) + self.p0
+
+
+class AdamiReproducingDivergence(Equation):
+
+    def __init__(self, dest, sources, dim):
+        self.dim = dim
+        super(AdamiReproducingDivergence, self).__init__(dest, sources)
+
+    def initialize(self, d_idx, d_kappa, d_wij_sum):
+        d_kappa[d_idx] = 0.0
+        d_wij_sum[d_idx] = 0.0
+
+    def loop(self, d_idx, s_idx, d_kappa, d_wij_sum,
+             d_nx, d_ny, d_nz, s_nx, s_ny, s_nz, d_V, s_V,
+             DWIJ, XIJ, RIJ, EPS):
+        # particle volumes
+        Vi = 1./d_V[d_idx]
+        Vj = 1./s_V[s_idx]
+
+        # dot product in the numerator of Eq. (20)
+        nijdotdwij = (d_nx[d_idx] - s_nx[s_idx]) * DWIJ[0] + \
+            (d_ny[d_idx] - s_ny[s_idx]) * DWIJ[1] + \
+            (d_nz[d_idx] - s_nz[s_idx]) * DWIJ[2]
+
+        # dot product in the denominator of Eq. (20)
+        xijdotdwij = XIJ[0]*DWIJ[0] + XIJ[1]*DWIJ[1] + XIJ[2]*DWIJ[2]
+
+        # accumulate the contributions
+        d_kappa[d_idx] += nijdotdwij * Vj
+        d_wij_sum[d_idx] += xijdotdwij * Vj
+
+    def post_loop(self, d_idx, d_kappa, d_wij_sum):
+        # normalize the curvature estimate
+        if d_wij_sum[d_idx] > 1e-12:
+            d_kappa[d_idx] /= d_wij_sum[d_idx]
+        d_kappa[d_idx] *= -self.dim
+
+
+class CSFSurfaceTensionForceAdami(Equation):
+    def initialize(self, d_idx, d_au, d_av, d_aw, d_kappa, d_cx, d_cy, d_cz, d_m, d_alpha, d_rho):
+        d_au[d_idx] += -d_alpha[d_idx]*d_kappa[d_idx]*d_cx[d_idx]/d_rho[d_idx]
+        d_av[d_idx] += -d_alpha[d_idx]*d_kappa[d_idx]*d_cy[d_idx]/d_rho[d_idx]
+        d_aw[d_idx] += -d_alpha[d_idx]*d_kappa[d_idx]*d_cz[d_idx]/d_rho[d_idx]
