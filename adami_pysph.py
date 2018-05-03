@@ -91,6 +91,11 @@ class AdamiReproducingDivergence(Equation):
             (d_nz[d_idx] - s_nz[s_idx]) * DWIJ[2]
 
         # dot product in the denominator of Eq. (20)
+
+        # NOTE: this is a mistake in the original paper by Adami et. al.  See XXX
+        # for the correct expression to be used in the denominator as done here.
+        # modgradc = sqrt(DWIJ[0]*DWIJ[0] + DWIJ[1]*DWIJ[1] + DWIJ[2]*DWIJ[2])
+
         xijdotdwij = XIJ[0]*DWIJ[0] + XIJ[1]*DWIJ[1] + XIJ[2]*DWIJ[2]
 
         # accumulate the contributions
@@ -99,16 +104,18 @@ class AdamiReproducingDivergence(Equation):
 
     def post_loop(self, d_idx, d_kappa, d_wij_sum):
         # normalize the curvature estimate
-        d_kappa[d_idx] /= d_wij_sum[d_idx]
+        if d_wij_sum[d_idx] > 1e-12:
+            d_kappa[d_idx] /= d_wij_sum[d_idx]
         d_kappa[d_idx] *= -self.dim
 
 
 class CSFSurfaceTensionForce(Equation):
     
-    def loop(self, d_idx, d_au, d_av, d_aw, d_kappa, d_cx, d_cy, d_cz, d_m, d_alpha):
-        d_au[d_idx] += -d_alpha[d_idx]*d_kappa[d_idx]*d_cx[d_idx]/d_m[d_idx]
-        d_av[d_idx] += -d_alpha[d_idx]*d_kappa[d_idx]*d_cy[d_idx]/d_m[d_idx]
-        d_aw[d_idx] += -d_alpha[d_idx]*d_kappa[d_idx]*d_cz[d_idx]/d_m[d_idx]
+    def initialize(self, d_idx, d_au, d_av, d_aw, d_kappa, d_cx, d_cy, d_cz, d_m, d_alpha):
+        
+        d_au[d_idx] += -d_alpha[d_idx]*d_kappa[d_idx]*d_cx[d_idx]# /d_m[d_idx]
+        d_av[d_idx] += -d_alpha[d_idx]*d_kappa[d_idx]*d_cy[d_idx]# /d_m[d_idx]
+        d_aw[d_idx] += -d_alpha[d_idx]*d_kappa[d_idx]*d_cz[d_idx]# /d_m[d_idx]
 
 
 class Adami(Application):
@@ -193,19 +200,19 @@ class Adami(Application):
         adami_equations = [
             Group(equations=[
                 SummationDensity(dest='fluid', sources=['fluid'])
-            ]),
+            ], real=False),
             Group(equations=[
                 StateEquation(dest='fluid', sources=None, rho0=rho0,
                               p0=p0),
-            ]),
+            ], real=False),
             Group(equations=[
                 AdamiColorGradient(dest='fluid', sources=['fluid']),
-            ],
+            ], real=False
             ),
             Group(equations=[
                 AdamiReproducingDivergence(dest='fluid', sources=['fluid'],
                                            dim=2),
-            ], ),
+            ], real=False),
             Group(
                 equations=[
                     MomentumEquationPressureGradient(
@@ -218,8 +225,8 @@ class Adami(Application):
 
         return adami_equations
 
-    def pre_step(self, solver):
-        solver.dump_output()
+    # def pre_step(self, solver):
+    #     solver.dump_output()
 
 
 if __name__ == '__main__':
