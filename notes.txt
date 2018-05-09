@@ -45,5 +45,9 @@ Skipped:
 
 30-04-2018:
 1) No background pressure mentioned in that paper.
+2) Post Processing done. 
+3) Adami Scheme in PySPH fixed. It's not right in both the papers, it's supposed to be divided by density. Tell sir the same. 
+4) Shadloo Ydlis scheme has some issue. : The nx and ny seem okay but with some anomolies.
+
 
 
