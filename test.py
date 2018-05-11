@@ -2,31 +2,27 @@ import numpy
 
 # Particle generator
 from pysph.base.utils import get_particle_array
+
 from pysph.base.kernels import CubicSpline, WendlandQuintic, Gaussian, \
     QuinticSpline
+
 from pysph.sph.equation import Equation
 
 # SPH Equations and Group
 from pysph.sph.equation import Group
 
-from pysph.sph.wc.viscosity import ClearyArtificialViscosity
-
 from pysph.sph.wc.transport_velocity import SummationDensity, \
     SolidWallPressureBC, SolidWallNoSlipBC, StateEquation,\
-    MomentumEquationArtificialStress, MomentumEquationViscosity
+    SetWallVelocity
 
-from pysph.sph.surface_tension import ShadlooYildizSurfaceTensionForce, CSFSurfaceTensionForce, \
-    SmoothedColor, AdamiColorGradient, MorrisColorGradient, \
-    AdamiReproducingDivergence, SY11ColorGradient
+from pysph.sph.surface_tension import ShadlooYildizSurfaceTensionForce, SmoothedColor
 
 from pysph.sph.gas_dynamics.basic import ScaleSmoothingLength
-
 # PySPH solver and application
 from pysph.solver.application import Application
 from pysph.solver.solver import Solver
 
 # Integrators and Steppers
-from pysph.sph.integrator_step import TransportVelocityStep
 from pysph.sph.integrator_step import VerletSymplecticWCSPHStep
 
 from pysph.sph.integrator import PECIntegrator
@@ -57,7 +53,7 @@ nghost_layers = 5
 dx = dy = 0.0125
 dxb2 = dyb2 = 0.5 * dx
 volume = dx*dx
-hdx = 1.3
+hdx = 1.0
 h0 = hdx * dx
 rho0 = 1000.0
 c0 = 10.0
@@ -98,6 +94,9 @@ class SY11DiracDelta(Equation):
         # discretized dirac delta
         d_ddelta[d_idx] = 0.0
         d_N[d_idx] = 0.0
+        d_nx[d_idx] = 0.0
+        d_ny[d_idx] = 0.0
+        d_nz[d_idx] = 0.0
 
     def loop(self, d_idx, s_idx, d_color, s_color, d_cx, d_cy, d_cz,
              d_V, s_V, DWIJ):
@@ -124,7 +123,7 @@ class SY11DiracDelta(Equation):
         if mod_gradc2 > self.epsilon2:
             mod_gradc = sqrt(mod_gradc2)
 
-            # d_N[d_idx] = 1.0
+            d_N[d_idx] = 1.0
 
             d_nx[d_idx] = d_cx[d_idx]/mod_gradc
             d_ny[d_idx] = d_cy[d_idx]/mod_gradc
@@ -144,7 +143,7 @@ class InterfaceCurvatureFromNumberDensity(Equation):
         nijdotwij = (d_nx[d_idx]-s_nx[s_idx])*DWIJ[0] + (d_ny[d_idx]-s_ny[s_idx])*DWIJ[1] + (d_nz[d_idx]-s_nz[s_idx])*DWIJ[2]
         tmp = 1.0
         tmp = min(d_N[d_idx], s_N[s_idx])
-        d_kappa[d_idx] += tmp*psiab*nijdotwij
+        d_kappa[d_idx] += psiab*nijdotwij
 
 
 class MomentumEquationPressureGradient(Equation):
@@ -153,13 +152,13 @@ class MomentumEquationPressureGradient(Equation):
         d_av[d_idx] = 0.0
         d_aw[d_idx] = 0.0
 
-    def loop(self, d_idx, s_idx, DWIJ, d_au, d_av, d_aw, d_V, s_V, d_p, s_p):
+    def loop(self, d_idx, s_idx, DWIJ, d_au, d_av, d_aw, d_V, s_V, d_p, s_p, d_m):
         pi = d_p[d_idx]/(d_V[d_idx]*d_V[d_idx])
         pj = s_p[s_idx]/(s_V[s_idx]*s_V[s_idx])
-        factor = pi+pj
-        d_au[d_idx] += (pi+pj)*DWIJ[0]
-        d_av[d_idx] += (pi+pj)*DWIJ[1]
-        d_aw[d_idx] += (pi+pj)*DWIJ[2]
+        factor = (pi+pj)/d_m[d_idx]
+        d_au[d_idx] += -factor*DWIJ[0]
+        d_av[d_idx] += -factor*DWIJ[1]
+        d_aw[d_idx] += -factor*DWIJ[2]
 
 
 class ShadlooArtificialViscosity(Equation):
@@ -173,19 +172,20 @@ class ShadlooArtificialViscosity(Equation):
         d_aw[d_idx] = 0.0
 
     def loop(self, d_idx, s_idx, d_h, s_h, d_cs, s_cs, d_rho, s_rho, VIJ, XIJ,
-             R2IJ, EPS, d_V, s_V, d_au, d_av, d_aw, DWIJ):
+             R2IJ, EPS, d_V, s_V, d_au, d_av, d_aw, DWIJ, d_m):
         mua = 0.125*self.alpha*d_h[d_idx]*d_cs[d_idx]*d_rho[d_idx]
         mub = 0.125*self.alpha*s_h[s_idx]*s_cs[s_idx]*s_rho[s_idx]
         muab = 2.0*mua*mub/(mua+mub)
         vijdotxij = VIJ[0]*XIJ[0] + VIJ[1]*XIJ[1] + VIJ[2]*XIJ[2]
         den = d_V[d_idx]*s_V[s_idx]*(R2IJ + EPS)
         piij = 8.0*muab*vijdotxij/den
-        d_au[d_idx] += piij*DWIJ[0]
-        d_av[d_idx] += piij*DWIJ[1]
-        d_aw[d_idx] += piij*DWIJ[2]
+        d_au[d_idx] += -piij*DWIJ[0]/d_m[d_idx]
+        d_av[d_idx] += -piij*DWIJ[1]/d_m[d_idx]
+        d_aw[d_idx] += -piij*DWIJ[2]/d_m[d_idx]
 
 
 class SquareDroplet(Application):
+
     def create_particles(self):
         ghost_extent = (nghost_layers + 0.5)*dx
 
@@ -228,7 +228,7 @@ class SquareDroplet(Application):
 
             # variable to indicate reliable normals and normalizing
             # constant
-            'N', 'wij_sum',
+            'N', 'wij_sum', 'wg', 'ug', 'vg'
 
         ]
 
@@ -240,10 +240,11 @@ class SquareDroplet(Application):
         # set the fluid velocity with respect to the sinusoidal
         # perturbation
         fluid.u[:] = -U
+        fluid.N[:] = 0.0
         mode = 1
         for i in range(len(fluid.x)):
             ang = 2*numpy.pi*fluid.x[i]/(mode*domain_width)
-            if fluid.y[i] > domain_height/2+psi0*domain_height*numpy.sin(ang):
+            if fluid.y[i] >= domain_height/2+psi0*domain_height*numpy.sin(ang):
                 fluid.u[i] = U
                 fluid.color[i] = 1.0
 
@@ -283,10 +284,11 @@ class SquareDroplet(Application):
     def create_domain(self):
         return DomainManager(xmin=0, xmax=domain_width, ymin=0,
                              ymax=domain_height,
-                             periodic_in_x=True, periodic_in_y=False)
+                             periodic_in_x=True, periodic_in_y=False,
+                             n_layers=5.0)
 
     def create_solver(self):
-        kernel = WendlandQuintic(dim=2)
+        kernel = QuinticSpline(dim=2)
         integrator = PECIntegrator(fluid=VerletSymplecticWCSPHStep())
         solver = Solver(
             kernel=kernel, dim=dim, integrator=integrator,
@@ -301,7 +303,7 @@ class SquareDroplet(Application):
             # and this isn't modified for the simulation.
             Group(equations=[
                 SummationDensity(dest='fluid', sources=['fluid', 'wall']),
-                SummationDensity(dest='wall', sources=['fluid', 'wall'])
+                # SummationDensity(dest='wall', sources=['fluid', 'wall'])
             ], real=False),
 
             # Given the updated number density for the fluid, we can update
@@ -310,8 +312,10 @@ class SquareDroplet(Application):
             # condition. Also compute the gradient of the color function to
             # compute the normal at the interface.
             Group(equations=[
-                StateEquation(dest='fluid', sources=None, rho0=rho0,
+                StateEquation(dest='fluid', sources=None, rho0=rho0, b=0.0,
                               p0=p0),
+                SetWallVelocity(dest='wall', sources=['fluid']),
+                # SmoothedColor(dest='fluid', sources=['fluid']),
             ], real=False),
 
             Group(
@@ -320,7 +324,6 @@ class SquareDroplet(Application):
                         dest='wall', sources=['fluid'], p0=p0, rho0=rho0,
                         gy=gy, b=1.0),
                 ], real=False),
-
 
             #################################################################
             # Begin Surface tension formulation
@@ -335,7 +338,7 @@ class SquareDroplet(Application):
             # Compute the discretized dirac delta with respect to the new
             # smoothing length.
             Group(equations=[
-                SY11DiracDelta(dest='fluid', sources=['fluid'])
+                SY11DiracDelta(dest='fluid', sources=['fluid', 'wall'])
             ], real=False),
 
             # Compute the interface curvature using the modified smoothing
@@ -371,7 +374,7 @@ class SquareDroplet(Application):
                         dest='fluid', sources=['fluid', 'wall']),
 
                     # Artificial viscosity for the fluid phase.
-                    ShadlooArtificialViscosity(dest='fluid', sources=['fluid']),
+                    ShadlooArtificialViscosity(dest='fluid', sources=['fluid', 'wall']),
 
                     # Surface tension force for the SY11 formulation
                     ShadlooYildizSurfaceTensionForce(dest='fluid',
