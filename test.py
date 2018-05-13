@@ -15,7 +15,7 @@ from pysph.sph.wc.transport_velocity import SummationDensity, \
     SolidWallPressureBC, SolidWallNoSlipBC, StateEquation,\
     SetWallVelocity
 
-from pysph.sph.surface_tension import ShadlooYildizSurfaceTensionForce, SmoothedColor
+from pysph.sph.surface_tension import SmoothedColor
 
 from pysph.sph.gas_dynamics.basic import ScaleSmoothingLength
 # PySPH solver and application
@@ -66,6 +66,46 @@ dt = 1e-4
 
 factor1 = 0.8
 factor2 = 1/factor1
+
+
+class ShadlooYildizSurfaceTensionForce(Equation):
+    r"""Acceleration due to surface tension force Eq. (7,9) in [SY11]:
+
+    .. math:
+
+        \frac{d\boldsymbol{v}_a} = \frac{1}{m_a} \sigma \kappa_a
+        \boldsymbol{n}_a \delta_a^s\,,
+
+    where, :math:`\delta^s` is the discretized dirac delta function,
+    :math:`\boldsymbol{n}` is the interface normal, :math:`\kappa` is
+    the discretized interface curvature and :math:`\sigma` is the
+    surface tension force constant.
+
+    """
+
+    def __init__(self, dest, sources, sigma=0.1):
+        self.sigma = sigma
+
+        # base class initialization
+        super(ShadlooYildizSurfaceTensionForce, self).__init__(dest, sources)
+
+    def initialize(self, d_idx, d_au, d_av, d_aw):
+        d_au[d_idx] = 0.0
+        d_av[d_idx] = 0.0
+        d_aw[d_idx] = 0.0
+
+    def loop(self, d_idx, d_au, d_av, d_aw, d_kappa,
+             d_nx, d_ny, d_nz, d_m, d_rho, d_ddelta):
+
+        mi = 1./d_m[d_idx]
+        rhoi = 1./d_rho[d_idx]
+
+        # acceleration per uint mass term Eq. (7) in [SY11]
+        tmp = self.sigma * d_kappa[d_idx] * d_ddelta[d_idx]* rhoi
+
+        d_au[d_idx] += tmp * d_nx[d_idx]
+        d_av[d_idx] += tmp * d_ny[d_idx]
+        d_aw[d_idx] += tmp * d_nz[d_idx]
 
 
 class SY11DiracDelta(Equation):
@@ -143,7 +183,7 @@ class InterfaceCurvatureFromNumberDensity(Equation):
         nijdotwij = (d_nx[d_idx]-s_nx[s_idx])*DWIJ[0] + (d_ny[d_idx]-s_ny[s_idx])*DWIJ[1] + (d_nz[d_idx]-s_nz[s_idx])*DWIJ[2]
         tmp = 1.0
         tmp = min(d_N[d_idx], s_N[s_idx])
-        d_kappa[d_idx] += psiab*nijdotwij
+        d_kappa[d_idx] += psiab*nijdotwij*tmp
 
 
 class MomentumEquationPressureGradient(Equation):
