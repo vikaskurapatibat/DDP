@@ -50,4 +50,5 @@ Skipped:
 4) Shadloo Ydlis scheme has some issue. : The nx and ny seem okay but with some anomolies.
 
 
+Ask sir about the rod case using Adami Divergence problem.
 
