@@ -1,3 +1,7 @@
+# DDP
+
+This repository is for implementation of MultiPhase SPH schemes concentrating on the formulation of Surface Tension in SPH.
+
 1) Unable to reproduce the wrong results with Morris setup even with gamma 1 and 7 and no background pressure. 
 
 2) Adami gives wrong results with gamma 1 and 7 and no background pressure. (check)
@@ -21,7 +25,7 @@ To do:
 
 1) morris background pressure (1)
 2) Post Processing (1)
-3) PySPH cases fix (2) - Adami scheme in PySPH has some issue with Kappa calculation even from the pressure. Need help.
+3) PySPH cases fix (2)
 4) Shadloo case fix (2)
 5) Adami Cases: three phase interaction (3)
 6) TVF + ST (4)
