@@ -1,6 +1,19 @@
 import numpy as np
 import os
 
+from surface_tension import MomentumEquationViscosityAdami, StateEquation, AdamiReproducingDivergence, CSFSurfaceTensionForceAdami
+
+from surface_tension import SummationDensity, MomentumEquationPressureGradientAdami, MomentumEquationViscosityAdami, SolidWallPressureBCnoDensity, ColorGradientAdami, ConstructStressMatrix, SurfaceForceAdami
+
+from pysph.sph.wc.transport_velocity import SummationDensity, \
+    MomentumEquationPressureGradient,\
+    SolidWallPressureBC, SolidWallNoSlipBC, StateEquation,\
+    MomentumEquationArtificialStress, MomentumEquationViscosity
+from pysph.sph.surface_tension import InterfaceCurvatureFromNumberDensity, \
+    ShadlooYildizSurfaceTensionForce, CSFSurfaceTensionForce, \
+    SmoothedColor, AdamiColorGradient, MorrisColorGradient, \
+    SY11DiracDelta, AdamiReproducingDivergence, SY11ColorGradient
+
 from pysph.sph.wc.basic import TaitEOS
 from pysph.sph.gas_dynamics.basic import ScaleSmoothingLength
 
@@ -24,21 +37,22 @@ from surface_tension import SummationDensitySourceMass, MomentumEquationViscosit
 dim = 2
 Lx = 0.5
 Ly = 1.0
-
+factor1 = 0.8
+factor2 = 1.0/factor1
 nu = 0.0
 sigma = 1.0
-rho1 = 1.
+rho0 = 1.
 
 c0 = 20.0
 gamma = 1.4
 R = 287.1
 
-p1 = c0**2 * rho1
+p0 = c0**2 * rho0
 
 nx = 50
 dx = Lx / nx
 volume = dx * dx
-hdx = 1.5
+hdx = 1.0
 
 h0 = hdx * dx
 
@@ -46,11 +60,11 @@ tf = 0.5
 
 epsilon = 0.01 / h0
 
-KE = 10**(-6.6)*p1*p1*gamma/(c0 * c0 * rho1 * rho1 * nx * nx * (gamma - 1))
+KE = 10**(-6.6)*p0*p0*gamma/(c0 * c0 * rho0 * rho0 * nx * nx * (gamma - 1))
 
-Vmax = np.sqrt(2 * KE / (rho1 * dx * dx))
+Vmax = np.sqrt(2 * KE / (rho0 * dx * dx))
 
-dt1 = 0.25*np.sqrt(rho1*h0*h0*h0/(2.0*np.pi*sigma))
+dt1 = 0.25*np.sqrt(rho0*h0*h0*h0/(2.0*np.pi*sigma))
 
 dt2 = 0.25*h0/(c0+Vmax)
 
@@ -58,11 +72,18 @@ dt = 0.9*min(dt1, dt2)
 
 
 class MultiPhase(Application):
+    def add_user_options(self, group):
+        choices = ['morris', 'tvf', 'adami_stress', 'adami', 'shadloo']
+        group.add_argument(
+            "--scheme", action="store", dest='scheme', default='morris',
+            choices=choices,
+            help='Specify scheme to use among %s' % choices
+        )
 
     def create_particles(self):
         fluid_x, fluid_y = get_2d_block(
             dx=dx, length=Lx - dx, height=Ly - dx, center=np.array([0., 0.5 * Ly]))
-        rho_fluid = np.ones_like(fluid_x) * rho1
+        rho_fluid = np.ones_like(fluid_x) * rho0
         m_fluid = rho_fluid * volume
         h_fluid = np.ones_like(fluid_x) * h0
         cs_fluid = np.ones_like(fluid_x) * c0
@@ -71,7 +92,7 @@ class MultiPhase(Application):
                             'uhat', 'vhat', 'what', 'auhat', 'avhat', 'awhat',
                             'ax', 'ay', 'az', 'wij', 'vmag2', 'N', 'wij_sum',
                             'rho0', 'u0', 'v0', 'w0', 'x0', 'y0', 'z0',
-                            'kappa', 'arho', 'nu']
+                            'kappa', 'arho', 'nu', 'pi00', 'pi01', 'pi10', 'pi11']
         fluid = get_particle_array(
             name='fluid', x=fluid_x, y=fluid_y, h=h_fluid, m=m_fluid,
             rho=rho_fluid, cs=cs_fluid, additional_props=additional_props)
@@ -85,8 +106,8 @@ class MultiPhase(Application):
                                  'kappa', 'N', 'scolor', 'p'])
         angles = np.random.random_sample((len(fluid.x),))*2*np.pi
         vel = np.sqrt(2 * KE / fluid.m)
-        fluid.u = vel*2.0*np.cos(angles)
-        fluid.v = vel*2.0*np.sin(angles)
+        fluid.u = vel #*2.0*np.cos(angles)
+        fluid.v = vel #*2.0*np.sin(angles)
         fluid.nu[:] = 0.0
         return [fluid]
 
@@ -96,7 +117,7 @@ class MultiPhase(Application):
             periodic_in_x=True, periodic_in_y=True, n_layers=6)
 
     def create_solver(self):
-        kernel = QuinticSpline(dim=2)
+        kernel = CubicSpline(dim=2)
         integrator = EPECIntegrator(fluid=TransportVelocityStep())
         solver = Solver(
             kernel=kernel, dim=dim, integrator=integrator,
@@ -104,6 +125,131 @@ class MultiPhase(Application):
         return solver
 
     def create_equations(self):
+        sy11_equations = [
+            Group(equations=[
+                SummationDensity(dest='fluid', sources=['fluid'])
+            ], real=False),
+            Group(equations=[
+                StateEquation(dest='fluid', sources=None, rho0=rho0,
+                              p0=p0),
+                SY11ColorGradient(dest='fluid', sources=['fluid'])
+            ], real=False),
+            Group(equations=[
+                ScaleSmoothingLength(dest='fluid', sources=None,
+                                     factor=factor1)
+            ], real=False, update_nnps=True),
+            Group(equations=[
+                SY11DiracDelta(dest='fluid', sources=['fluid'])
+            ], real=False
+            ),
+            Group(equations=[
+                InterfaceCurvatureFromNumberDensity(
+                    dest='fluid', sources=['fluid'],
+                    with_morris_correction=True),
+            ], real=False),
+            Group(equations=[
+                ScaleSmoothingLength(dest='fluid', sources=None,
+                                     factor=factor2)
+            ], real=False, update_nnps=True,
+            ),
+            Group(
+                equations=[
+                    MomentumEquationPressureGradient(
+                        dest='fluid', sources=['fluid'], pb=p0),
+                    MomentumEquationViscosity(
+                        dest='fluid', sources=['fluid'], nu=nu),
+                    ShadlooYildizSurfaceTensionForce(dest='fluid',
+                                                     sources=None,
+                                                     sigma=sigma),
+                    MomentumEquationArtificialStress(dest='fluid',
+                                                     sources=['fluid']),
+                ], )
+        ]
+
+        adami_equations = [
+            Group(equations=[
+                SummationDensity(dest='fluid', sources=['fluid'])
+            ], real=False),
+            Group(equations=[
+                StateEquation(dest='fluid', sources=None, rho0=rho0,
+                              p0=p0),
+            ], real=False),
+            Group(equations=[
+                AdamiColorGradient(dest='fluid', sources=['fluid']),
+            ], real=False
+            ),
+            Group(equations=[
+                AdamiReproducingDivergence(dest='fluid', sources=['fluid'],
+                                           dim=2),
+            ], real=False),
+            Group(
+                equations=[
+                    MomentumEquationPressureGradient(
+                        dest='fluid', sources=['fluid'], pb=p0),
+                    MomentumEquationViscosityAdami(
+                        dest='fluid', sources=['fluid']),
+                    CSFSurfaceTensionForceAdami(dest='fluid', sources=None,)
+                ], )
+        ]
+
+        adami_stress_equations = [
+            Group(equations=[
+                SummationDensity(
+                    dest='fluid', sources=[
+                        'fluid']),
+            ], real=False),
+            Group(equations=[
+                TaitEOS(dest='fluid', sources=None,
+                        rho0=rho0, c0=c0, gamma=7, p0=p0),
+            ], real=False),
+            Group(equations=[
+                ColorGradientAdami(dest='fluid', sources=['fluid']),
+            ], real=False),
+            Group(equations=[ConstructStressMatrix(
+                dest='fluid', sources=None, sigma=sigma, d=2)], real=False),
+            Group(
+                equations=[
+                    MomentumEquationPressureGradientAdami(
+                        dest='fluid', sources=['fluid']),
+                    MomentumEquationViscosityAdami(
+                        dest='fluid', sources=['fluid']),
+                    SurfaceForceAdami(
+                        dest='fluid', sources=['fluid']),
+                ]),
+        ]
+
+        tvf_equations = [
+            Group(equations=[
+                SummationDensity(dest='fluid', sources=['fluid'])
+            ], real=False),
+            Group(equations=[
+                StateEquation(dest='fluid', sources=None, rho0=rho0,
+                              p0=p0),
+                SmoothedColor(dest='fluid', sources=['fluid']),
+            ], real=False),
+            Group(equations=[
+                MorrisColorGradient(dest='fluid', sources=['fluid'],
+                                    epsilon=epsilon),
+            ], real=False
+            ),
+            Group(equations=[
+                InterfaceCurvatureFromNumberDensity(
+                    dest='fluid', sources=['fluid'],
+                    with_morris_correction=True),
+            ], real=False),
+            Group(
+                equations=[
+                    MomentumEquationPressureGradient(
+                        dest='fluid', sources=['fluid'], pb=p0),
+                    MomentumEquationViscosity(
+                        dest='fluid', sources=['fluid'], nu=nu),
+                    CSFSurfaceTensionForce(dest='fluid', sources=None,
+                                           sigma=sigma),
+                    MomentumEquationArtificialStress(dest='fluid',
+                                                     sources=['fluid']),
+                ], )
+        ]
+
         morris_equations = [
             Group(equations=[
                 SummationDensitySourceMass(
@@ -111,11 +257,11 @@ class MultiPhase(Application):
                         'fluid']),
             ], real=False, update_nnps=False),
             Group(equations=[
-                TaitEOS(dest='fluid', sources=None, rho0=rho1, c0=c0, gamma=1.0),
+                TaitEOS(dest='fluid', sources=None, rho0=rho0, c0=c0, gamma=1.0),
                 SmoothedColor(
                     dest='fluid', sources=['fluid', ]),
-                ScaleSmoothingLength(dest='fluid', sources=None, factor=2.0/3.0),
-            ], real=False, update_nnps=True),
+                # ScaleSmoothingLength(dest='fluid', sources=None, factor=2.0/3.0),
+            ], real=False, update_nnps=False),
             Group(equations=[
                 MorrisColorGradient(dest='fluid', sources=['fluid', ],
                                     epsilon=epsilon),
@@ -123,8 +269,8 @@ class MultiPhase(Application):
             Group(equations=[
                 InterfaceCurvatureFromDensity(dest='fluid', sources=['fluid'],
                                                 with_morris_correction=True),
-                ScaleSmoothingLength(dest='fluid', sources=None, factor=1.5),
-            ], real=False, update_nnps=True),
+                # ScaleSmoothingLength(dest='fluid', sources=None, factor=1.5),
+            ], real=False, update_nnps=False),
             Group(
                 equations=[
                     MomentumEquationPressureGradientMorris(
@@ -136,7 +282,16 @@ class MultiPhase(Application):
                 ], update_nnps=False)
         ]
 
-        return morris_equations
+        if self.options.scheme == 'tvf':
+            return tvf_equations
+        elif self.options.scheme == 'adami_stress':
+            return adami_stress_equations
+        elif self.options.scheme == 'adami':
+            return adami_equations
+        elif self.options.scheme == 'shadloo':
+            return sy11_equations
+        else:
+            return morris_equations
 
     def post_process(self):
         import matplotlib.pyplot as plt
