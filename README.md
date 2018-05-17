@@ -51,8 +51,19 @@ Skipped:
 1) No background pressure mentioned in that paper.
 2) Post Processing done. 
 3) Adami Scheme in PySPH fixed. It's not right in both the papers, it's supposed to be divided by density. Tell sir the same. 
-4) Shadloo Ydlis scheme has some issue. : The nx and ny seem okay but with some anomolies.
+4) Shadloo Ydlis scheme has some issue. : The nx and ny seem okay but with some anomolies. Edit: They are right. There is some other issue in the problem. 
+
 
 
 Ask sir about the rod case using Adami Divergence problem.
+
+Shadloo case still has the issue after fixing the equations accordingly.
+
+
+User options to be set in all the problems.
+
+
+Things to ask sir: 
+
+Reason why the square droplet isn't moving even when the accelerations are there.
 

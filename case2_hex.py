@@ -96,7 +96,7 @@ class MultiPhase(Application):
                             'uhat', 'vhat', 'what', 'auhat', 'avhat', 'awhat',
                             'ax', 'ay', 'az', 'wij', 'vmag2', 'N', 'wij_sum',
                             'rho0', 'u0', 'v0', 'w0', 'x0', 'y0', 'z0',
-                            'kappa', 'arho', 'nu']
+                            'kappa', 'arho', 'nu', 'pi00', 'pi01', 'pi10', 'pi11', 'alpha']
         fluid = get_particle_array(
             name='fluid', x=fluid_x, y=fluid_y, h=h_fluid, m=m_fluid,
             rho=rho_fluid, cs=cs_fluid, additional_props=additional_props)
@@ -105,6 +105,7 @@ class MultiPhase(Application):
                 fluid.color[i] = 1.0
             else:
                 fluid.color[i] = 0.0
+        fluid.alpha[:] = sigma
         fluid.V[:] = 1. / volume
         fluid.add_output_arrays(['V', 'color', 'cx', 'cy', 'nx', 'ny', 'ddelta',
                                  'kappa', 'N', 'scolor', 'p'])
