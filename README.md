@@ -67,3 +67,6 @@ Things to ask sir:
 
 Reason why the square droplet isn't moving even when the accelerations are there. Solved, they were moving with low accelerations.
 
+
+Need to rerun the square droplet problem with the modified parameters once again.
+
