@@ -65,5 +65,5 @@ User options to be set in all the problems.
 
 Things to ask sir: 
 
-Reason why the square droplet isn't moving even when the accelerations are there.
+Reason why the square droplet isn't moving even when the accelerations are there. Solved, they were moving with low accelerations.
 
