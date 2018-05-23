@@ -68,5 +68,10 @@ Things to ask sir:
 Reason why the square droplet isn't moving even when the accelerations are there. Solved, they were moving with low accelerations.
 
 
-Need to rerun the square droplet problem with the modified parameters once again.
+Need to rerun the square droplet problem with the modified parameters once again. Done. 
+
+Ask sir how to change the solver according to the scheme.
+
+Kelvin Helmholtz problem works with almost all with a little mixing.
+
 
