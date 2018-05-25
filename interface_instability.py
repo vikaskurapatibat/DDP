@@ -83,7 +83,7 @@ class MultiPhase(Application):
 
     def create_particles(self):
         fluid_x, fluid_y = get_2d_block(
-            dx=dx, length=Lx - dx, height=Ly - dx, center=np.array([0., 0.5 * Ly]))
+            dx=dx, length=Lx-dx, height=Ly-dx, center=np.array([0., 0.5*Ly]))
         rho_fluid = np.ones_like(fluid_x) * rho0
         m_fluid = rho_fluid * volume
         h_fluid = np.ones_like(fluid_x) * h0
@@ -93,7 +93,8 @@ class MultiPhase(Application):
                             'uhat', 'vhat', 'what', 'auhat', 'avhat', 'awhat',
                             'ax', 'ay', 'az', 'wij', 'vmag2', 'N', 'wij_sum',
                             'rho0', 'u0', 'v0', 'w0', 'x0', 'y0', 'z0',
-                            'kappa', 'arho', 'nu', 'pi00', 'pi01', 'pi10', 'pi11']
+                            'kappa', 'arho', 'nu', 'pi00', 'pi01', 'pi10', 
+                            'pi11']
         fluid = get_particle_array(
             name='fluid', x=fluid_x, y=fluid_y, h=h_fluid, m=m_fluid,
             rho=rho_fluid, cs=cs_fluid, additional_props=additional_props)
@@ -103,8 +104,8 @@ class MultiPhase(Application):
             else:
                 fluid.color[i] = 0.0
         fluid.V[:] = 1. / volume
-        fluid.add_output_arrays(['V', 'color', 'cx', 'cy', 'nx', 'ny', 'ddelta',
-                                 'kappa', 'N', 'scolor', 'p'])
+        fluid.add_output_arrays(['V', 'color', 'cx', 'cy', 'nx', 'ny', 
+                                 'ddelta', 'kappa', 'N', 'scolor', 'p'])
         angles = np.random.random_sample((len(fluid.x),))*2*np.pi
         vel = np.sqrt(2 * KE / fluid.m)
         fluid.u = vel
@@ -256,10 +257,12 @@ class MultiPhase(Application):
                         'fluid']),
             ], real=False, update_nnps=False),
             Group(equations=[
-                TaitEOS(dest='fluid', sources=None, rho0=rho0, c0=c0, gamma=1.0),
+                TaitEOS(dest='fluid', sources=None, rho0=rho0, c0=c0, 
+                        gamma=1.0),
                 SmoothedColor(
                     dest='fluid', sources=['fluid', ]),
-                ScaleSmoothingLength(dest='fluid', sources=None, factor=2.0/3.0),
+                ScaleSmoothingLength(dest='fluid', sources=None, 
+                                     factor=2.0/3.0),
             ], real=False, update_nnps=False),
             Group(equations=[
                 MorrisColorGradient(dest='fluid', sources=['fluid', ],
@@ -267,7 +270,7 @@ class MultiPhase(Application):
             ], real=False, update_nnps=False),
             Group(equations=[
                 InterfaceCurvatureFromDensity(dest='fluid', sources=['fluid'],
-                                                with_morris_correction=True),
+                                              with_morris_correction=True),
                 ScaleSmoothingLength(dest='fluid', sources=None, factor=1.5),
             ], real=False, update_nnps=False),
             Group(
