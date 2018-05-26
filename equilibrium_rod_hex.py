@@ -1,18 +1,21 @@
 import numpy as np
 import os
 
-from surface_tension import MomentumEquationViscosityAdami, StateEquation, AdamiReproducingDivergence, CSFSurfaceTensionForceAdami
-
-from surface_tension import SummationDensity, MomentumEquationPressureGradientAdami, MomentumEquationViscosityAdami, SolidWallPressureBCnoDensity, ColorGradientAdami, ConstructStressMatrix, SurfaceForceAdami
+from surface_tension import MomentumEquationViscosityAdami, \
+    AdamiReproducingDivergence, CSFSurfaceTensionForceAdami,\
+    MomentumEquationPressureGradientAdami, ColorGradientAdami, \
+    ConstructStressMatrix, SurfaceForceAdami, SummationDensitySourceMass, \
+    MomentumEquationViscosityMorris, MomentumEquationPressureGradientMorris, \
+    InterfaceCurvatureFromDensity
 
 from pysph.sph.wc.transport_velocity import SummationDensity, \
-    MomentumEquationPressureGradient,\
-    SolidWallPressureBC, SolidWallNoSlipBC, StateEquation,\
+    MomentumEquationPressureGradient, StateEquation,\
     MomentumEquationArtificialStress, MomentumEquationViscosity
+
 from pysph.sph.surface_tension import InterfaceCurvatureFromNumberDensity, \
     ShadlooYildizSurfaceTensionForce, CSFSurfaceTensionForce, \
     SmoothedColor, AdamiColorGradient, MorrisColorGradient, \
-    SY11DiracDelta, AdamiReproducingDivergence, SY11ColorGradient
+    SY11DiracDelta, SY11ColorGradient
 
 from pysph.sph.wc.basic import TaitEOS
 from pysph.sph.gas_dynamics.basic import ScaleSmoothingLength
@@ -22,17 +25,14 @@ from pysph.base.utils import get_particle_array
 from pysph.base.kernels import CubicSpline, QuinticSpline
 from pysph.sph.equation import Group, Equation
 
-from pysph.sph.surface_tension import SmoothedColor, CSFSurfaceTensionForce
-
 from pysph.solver.application import Application
 from pysph.solver.solver import Solver
 
 from pysph.sph.integrator_step import TransportVelocityStep
-from pysph.sph.integrator import PECIntegrator, EPECIntegrator
+from pysph.sph.integrator import PECIntegrator
 
 from pysph.base.nnps import DomainManager
 from pysph.solver.utils import iter_output
-from surface_tension import SummationDensitySourceMass, MomentumEquationViscosityMorris, MomentumEquationPressureGradientMorris, InterfaceCurvatureFromDensity, MorrisColorGradient
 
 dim = 2
 Lx = 1.0
@@ -96,7 +96,8 @@ class MultiPhase(Application):
                             'uhat', 'vhat', 'what', 'auhat', 'avhat', 'awhat',
                             'ax', 'ay', 'az', 'wij', 'vmag2', 'N', 'wij_sum',
                             'rho0', 'u0', 'v0', 'w0', 'x0', 'y0', 'z0',
-                            'kappa', 'arho', 'nu', 'pi00', 'pi01', 'pi10', 'pi11', 'alpha']
+                            'kappa', 'arho', 'nu', 'pi00', 'pi01', 'pi10',
+                            'pi11', 'alpha']
         fluid = get_particle_array(
             name='fluid', x=fluid_x, y=fluid_y, h=h_fluid, m=m_fluid,
             rho=rho_fluid, cs=cs_fluid, additional_props=additional_props)
@@ -107,8 +108,8 @@ class MultiPhase(Application):
                 fluid.color[i] = 0.0
         fluid.alpha[:] = sigma
         fluid.V[:] = 1. / volume
-        fluid.add_output_arrays(['V', 'color', 'cx', 'cy', 'nx', 'ny', 'ddelta',
-                                 'kappa', 'N', 'scolor', 'p'])
+        fluid.add_output_arrays(['V', 'color', 'cx', 'cy', 'nx', 'ny', 
+                                'ddelta', 'kappa', 'N', 'scolor', 'p'])
         fluid.nu[:] = nu
         return [fluid]
 
@@ -156,14 +157,12 @@ class MultiPhase(Application):
             Group(
                 equations=[
                     MomentumEquationPressureGradient(
-                        dest='fluid', sources=['fluid'], pb=p0),
+                        dest='fluid', sources=['fluid'], pb=0.0),
                     MomentumEquationViscosity(
                         dest='fluid', sources=['fluid'], nu=nu),
                     ShadlooYildizSurfaceTensionForce(dest='fluid',
                                                      sources=None,
                                                      sigma=sigma),
-                    MomentumEquationArtificialStress(dest='fluid',
-                                                     sources=['fluid']),
                 ], )
         ]
 
@@ -173,7 +172,7 @@ class MultiPhase(Application):
             ], real=False),
             Group(equations=[
                 StateEquation(dest='fluid', sources=None, rho0=rho0,
-                              p0=p0),
+                              p0=p0, b=0.0),
             ], real=False),
             Group(equations=[
                 AdamiColorGradient(dest='fluid', sources=['fluid']),
@@ -186,7 +185,7 @@ class MultiPhase(Application):
             Group(
                 equations=[
                     MomentumEquationPressureGradient(
-                        dest='fluid', sources=['fluid'], pb=p0),
+                        dest='fluid', sources=['fluid'], pb=0.0),
                     MomentumEquationViscosityAdami(
                         dest='fluid', sources=['fluid']),
                     CSFSurfaceTensionForceAdami(dest='fluid', sources=None,)
@@ -262,7 +261,6 @@ class MultiPhase(Application):
                         rho0=rho0, c0=c0, gamma=1.0),
                 SmoothedColor(
                     dest='fluid', sources=['fluid', ]),
-                # ScaleSmoothingLength(dest='fluid', sources=None, factor=2.0/3.0),
             ], real=False, update_nnps=False),
             Group(equations=[
                 MorrisColorGradient(dest='fluid', sources=['fluid', ],
@@ -271,7 +269,6 @@ class MultiPhase(Application):
             Group(equations=[
                 InterfaceCurvatureFromDensity(dest='fluid', sources=['fluid'],
                                               with_morris_correction=True),
-                # ScaleSmoothingLength(dest='fluid', sources=None, factor=1.5),
             ], real=False, update_nnps=False),
             Group(
                 equations=[
