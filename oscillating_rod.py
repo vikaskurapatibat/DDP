@@ -1,61 +1,40 @@
+from math import sqrt
 import numpy as np
 import os
 
-import numpy as np
-import os
-
-from surface_tension import MomentumEquationViscosityAdami, StateEquation, AdamiReproducingDivergence, CSFSurfaceTensionForceAdami
-
-from surface_tension import SummationDensity, MomentumEquationPressureGradientAdami, MomentumEquationViscosityAdami, SolidWallPressureBCnoDensity, ColorGradientAdami, ConstructStressMatrix, SurfaceForceAdami
+from surface_tension import MomentumEquationViscosityAdami, \
+    AdamiReproducingDivergence, CSFSurfaceTensionForceAdami,\
+    MomentumEquationPressureGradientAdami, ColorGradientAdami, \
+    ConstructStressMatrix, SurfaceForceAdami, SummationDensitySourceMass, \
+    MomentumEquationViscosityMorris, MomentumEquationPressureGradientMorris, \
+    InterfaceCurvatureFromDensity, SolidWallPressureBCnoDensity
 
 from pysph.sph.wc.transport_velocity import SummationDensity, \
-    MomentumEquationPressureGradient,\
-    SolidWallPressureBC, SolidWallNoSlipBC, StateEquation,\
-    MomentumEquationArtificialStress, MomentumEquationViscosity
+    MomentumEquationPressureGradient, StateEquation,\
+    MomentumEquationArtificialStress, MomentumEquationViscosity, \
+    SolidWallNoSlipBC
+
 from pysph.sph.surface_tension import InterfaceCurvatureFromNumberDensity, \
     ShadlooYildizSurfaceTensionForce, CSFSurfaceTensionForce, \
     SmoothedColor, AdamiColorGradient, MorrisColorGradient, \
-    SY11DiracDelta, AdamiReproducingDivergence, SY11ColorGradient
+    SY11DiracDelta, SY11ColorGradient
 
 from pysph.sph.wc.basic import TaitEOS
 from pysph.sph.gas_dynamics.basic import ScaleSmoothingLength
 
-from pysph.tools.geometry import get_2d_block
+from pysph.tools.geometry import get_2d_block, remove_overlap_particles
 from pysph.base.utils import get_particle_array
 from pysph.base.kernels import CubicSpline, QuinticSpline
 from pysph.sph.equation import Group, Equation
 
-from pysph.sph.surface_tension import SmoothedColor, CSFSurfaceTensionForce
-
 from pysph.solver.application import Application
 from pysph.solver.solver import Solver
 
-from pysph.sph.integrator_step import TransportVelocityStep
-from pysph.sph.integrator import PECIntegrator, EPECIntegrator
-
-from pysph.base.nnps import DomainManager
-from pysph.solver.utils import iter_output
-from surface_tension import SummationDensitySourceMass, MomentumEquationViscosityMorris, MomentumEquationPressureGradientMorris, InterfaceCurvatureFromDensity, MorrisColorGradient
-
-from math import sqrt
-from pysph.solver.utils import load
-
-from pysph.sph.gas_dynamics.basic import ScaleSmoothingLength
-
-from pysph.tools.geometry import get_2d_block, get_2d_tank, get_2d_wall, remove_overlap_particles
-from pysph.base.utils import get_particle_array
-from pysph.base.kernels import CubicSpline, QuinticSpline
-from pysph.sph.equation import Group, Equation
-
-from pysph.sph.surface_tension import SmoothedColor, CSFSurfaceTensionForce
-
-from pysph.solver.application import Application
-from pysph.solver.solver import Solver
-from pysph.sph.wc.transport_velocity import SolidWallNoSlipBC
 from pysph.sph.integrator_step import TransportVelocityStep
 from pysph.sph.integrator import PECIntegrator
 
-from surface_tension import SolidWallPressureBCnoDensity, SummationDensitySourceMass, MomentumEquationViscosityMorris, MomentumEquationPressureGradientMorris, MorrisColorGradient, InterfaceCurvatureFromDensity
+from pysph.base.nnps import DomainManager
+from pysph.solver.utils import iter_output
 
 dim = 2
 Lx = 1.0
@@ -326,7 +305,7 @@ class MultiPhase(Application):
             Group(equations=[
                 MorrisColorGradient(dest='fluid', sources=['fluid', 'wall'],
                                     epsilon=epsilon),
-            ], 
+            ],
             ),
             Group(equations=[
                 InterfaceCurvatureFromNumberDensity(
