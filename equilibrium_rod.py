@@ -40,7 +40,7 @@ Ly = 1.0
 
 nu = 0.05
 sigma = 1.0
-factor1 = 0.5
+factor1 = 0.8
 factor2 = 1 / factor1
 rho0 = 1.0
 

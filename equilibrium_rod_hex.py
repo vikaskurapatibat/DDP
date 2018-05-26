@@ -40,7 +40,7 @@ Ly = 1.0
 
 nu = 0.05
 sigma = 1.0
-factor1 = 0.5
+factor1 = 0.8
 factor2 = 1 / factor1
 rho0 = 1.0
 
@@ -133,7 +133,7 @@ class MultiPhase(Application):
             ], real=False),
             Group(equations=[
                 StateEquation(dest='fluid', sources=None, rho0=rho0,
-                              p0=p0),
+                              p0=p0, b=0.0),
                 SY11ColorGradient(dest='fluid', sources=['fluid'])
             ], real=False),
             Group(equations=[
