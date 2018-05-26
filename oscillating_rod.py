@@ -1,4 +1,3 @@
-
 import numpy as np
 import os
 
@@ -40,7 +39,6 @@ from surface_tension import SummationDensitySourceMass, MomentumEquationViscosit
 
 from math import sqrt
 from pysph.solver.utils import load
-from pysph.sph.wc.basic import TaitEOS
 
 from pysph.sph.gas_dynamics.basic import ScaleSmoothingLength
 
@@ -64,12 +62,12 @@ Lx = 1.0
 Ly = 1.0
 
 nu = 0.05
-sigma = 2.0
-factor1 = 0.5
+sigma = 1.0
+factor1 = 0.8
 factor2 = 1 / factor1
 rho0 = 1.0
 
-c0 = 30.0
+c0 = 20.0
 gamma = 1.4
 R = 287.1
 
@@ -92,7 +90,7 @@ v0 = 10.0
 
 dt1 = 0.25*np.sqrt(rho0*h0*h0*h0/(2.0*np.pi*sigma))
 
-dt2 = 0.25*h0/(c0)
+dt2 = 0.25*h0/(c0+v0)
 
 dt3 = 0.125*rho0*h0*h0/nu
 
@@ -241,14 +239,14 @@ class MultiPhase(Application):
             Group(
                 equations=[
                     MomentumEquationPressureGradient(
-                        dest='fluid', sources=['fluid', 'wall'], pb=p0),
+                        dest='fluid', sources=['fluid', 'wall'], pb=0.0),
                     MomentumEquationViscosity(
                         dest='fluid', sources=['fluid'], nu=nu),
                     ShadlooYildizSurfaceTensionForce(dest='fluid',
                                                      sources=None,
                                                      sigma=sigma),
-                    MomentumEquationArtificialStress(dest='fluid',
-                                                     sources=['fluid']),
+                    # MomentumEquationArtificialStress(dest='fluid',
+                    #                                  sources=['fluid']),
                     SolidWallNoSlipBC(dest='fluid', sources=['wall'], nu=nu)
                 ], )
         ]
@@ -260,7 +258,7 @@ class MultiPhase(Application):
             ],),
             Group(equations=[
                 StateEquation(dest='fluid', sources=None, rho0=rho0,
-                              p0=p0),
+                              p0=p0, b=0.0),
                 SolidWallPressureBCnoDensity(dest='wall', sources=['fluid']),
             ],),
             Group(equations=[
@@ -274,7 +272,7 @@ class MultiPhase(Application):
             Group(
                 equations=[
                     MomentumEquationPressureGradient(
-                        dest='fluid', sources=['fluid', 'wall'], pb=p0),
+                        dest='fluid', sources=['fluid', 'wall'], pb=0.0),
                     MomentumEquationViscosityAdami(
                         dest='fluid', sources=['fluid']),
                     CSFSurfaceTensionForceAdami(dest='fluid', sources=None,),
@@ -387,25 +385,19 @@ class MultiPhase(Application):
             cy = 0
             vx = 0
             vy = 0
+            count = 0
             for i in range(length):
                 if color[i] == 1:
                     if x[i] < min_x:
                         min_x = x[i]
                     if x[i] > max_x:
                         max_x = x[i]
-                    else:
-                        continue
                     if x[i] > 0 and y[i] > 0:
                         cx += x[i]
                         cy += y[i]
                         vx += u[i]
                         vy += v[i]
                         count += 1
-                    else:
-                        continue
-
-                else:
-                    continue
             amat.append(0.5*(max_x - min_x))
             centerx.append(cx/count)
             centery.append(cy/count)
